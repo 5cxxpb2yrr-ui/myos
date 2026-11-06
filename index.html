@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><title>LifeOS Lite</title>
+<style>
+:root{--bg:#0e1624;--s:#162235;--s2:#1c2b42;--ln:#27384f;--tx:#e8edf5;--mu:#8fa0b8;--am:#f2b84b;--rd:#ef6a5b;--gr:#5cc99a}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 ui-rounded,system-ui,-apple-system,sans-serif;padding:0 14px calc(92px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;background:var(--bg);padding:calc(14px + env(safe-area-inset-top)) 0 10px;z-index:5}
+h1{margin:0;font-size:1.45rem;letter-spacing:-.01em}h2{font-size:1.05rem;margin:22px 0 8px;color:var(--mu);font-weight:600}
+.sub{color:var(--mu);font-size:.85rem}
+.card{background:var(--s);border:1px solid var(--ln);border-radius:14px;padding:12px 14px;margin:0 0 10px}
+.top{border-left:4px solid var(--am)}.late{border-left-color:var(--rd)}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.why{margin:4px 0 10px;color:var(--mu);font-size:.9rem}
+.chip{font-size:.72rem;padding:2px 8px;border-radius:99px;background:var(--s2);color:var(--mu);white-space:nowrap}
+button{font:inherit;color:var(--tx);background:var(--s2);border:1px solid var(--ln);border-radius:10px;padding:10px 14px;min-height:44px}
+button.pri,.fab{background:var(--am);color:#1a1405;border-color:var(--am);font-weight:700}
+nav{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr 64px 1fr;gap:6px;align-items:center;padding:8px 14px calc(8px + env(safe-area-inset-bottom));background:#0b121d;border-top:1px solid var(--ln);z-index:6}
+nav button{background:none;border:0;color:var(--mu)}nav button.on{color:var(--am);font-weight:700}
+.fab{width:56px;height:56px;border-radius:50%;font-size:1.8rem;padding:0;margin:-22px auto 0}
+.chk{display:flex;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--ln)}
+.chk input{width:24px;height:24px;accent-color:var(--am)}.chk.d span{text-decoration:line-through;color:var(--mu)}
+.empty{padding:28px 6px;color:var(--mu);text-align:center}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,th{padding:9px 4px;text-align:right;border-bottom:1px solid var(--ln)}th{color:var(--mu);font-weight:500;font-size:.8rem}td:first-child,th:first-child{text-align:left}
+.neg{color:var(--rd)}.pos{color:var(--gr)}
+label{display:block;margin:10px 0 0;color:var(--mu);font-size:.85rem}
+input,select,textarea{width:100%;font:inherit;font-size:16px;color:var(--tx);background:var(--bg);border:1px solid var(--ln);border-radius:10px;padding:10px;margin-top:4px}
+input[type=checkbox]{width:auto;margin:0 8px 0 0}
+#sheet{position:fixed;inset:0;background:rgba(5,9,15,.8);z-index:9;overflow:auto;padding:calc(16px + env(safe-area-inset-top)) 14px 40px}
+#sheet form{background:var(--s);border:1px solid var(--ln);border-radius:16px;padding:6px 16px 18px;max-width:520px;margin:0 auto}
+.btns{display:flex;gap:8px;margin-top:16px}.btns button{flex:1}
+.res{margin-top:10px;padding:10px;border-radius:10px;background:var(--s2)}
+</style></head><body>
+<header><h1 id="ti"></h1><div class="sub" id="su"></div></header>
+<main id="v"></main>
+<nav><button data-act="tab" data-t="today">Today</button><button data-act="tab" data-t="week">Week</button><button class="fab" data-act="add" aria-label="Add">+</button><button data-act="tab" data-t="money">Money</button></nav>
+<div id="sheet" hidden></div>
+<script>
+const $=s=>document.querySelector(s),K='lifeos-lite-v1';
+let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+if(!S||!S.items)S={_format:'lifeos-lite',items:[],set:{bal:0,pay:0,next:'',every:14}};
+S.items.forEach(i=>{if(i.req&&!i.stage)i.stage='requested';delete i.req});
+S.pharm=S.pharm||[];
+let tab='today',edit=null,pend=null,aff={amt:'',date:'',res:''};
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert('Could not save. Storage is full or blocked.')}};
+const pad=n=>String(n).padStart(2,'0'),iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const P=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12)},T=()=>iso(new Date());
+const add=(s,n)=>{const d=P(s);d.setDate(d.getDate()+n);return iso(d)};
+const addM=(s,n)=>{const d=P(s),day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+n);d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));return iso(d)};
+const diff=(a,b)=>Math.round((P(a)-P(b))/864e5),$$=n=>(n<0?'-':'')+'$'+Math.abs(Math.round(n)).toLocaleString();
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fd=s=>P(s).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}),uid=()=>Math.random().toString(36).slice(2,9);
+const step=(s,r)=>({weekly:()=>add(s,7),biweekly:()=>add(s,14),monthly:()=>addM(s,1),quarterly:()=>addM(s,3),semiannual:()=>addM(s,6),yearly:()=>addM(s,12)})[r]?.()||null;
+const CAT={routine:'Routine',rx:'Prescription',bill:'Bill',vehicle:'Vehicle',kids:'Kids',other:'Other'},W={routine:1,rx:3,bill:2.5,vehicle:1.5,kids:2,other:1};
+const REP=[['none','Once'],['daily','Daily'],['weekly','Weekly'],['biweekly','Every 2 weeks'],['monthly','Monthly'],['quarterly','Every 3 months'],['semiannual','Every 6 months'],['yearly','Yearly']];
+const DR={routine:'daily',rx:'monthly',bill:'monthly',vehicle:'none',kids:'weekly',other:'none'},DL={routine:0,rx:7,bill:3,vehicle:14,kids:1,other:3};
+
+/* ---- schedule ---- */
+function occ(it,from,to,owed){const o=[];if(it.arch||!it.due||it.rep==='daily')return o;let d=it.due,n=0;
+ if(d<from){if(owed)o.push(from);if(!step(d,it.rep))return o;while(d&&d<from&&n++<500)d=step(d,it.rep)}
+ while(d&&d<=to&&n++<500){if(d>=from)o.push(d);d=step(d,it.rep)}return o}
+const STG=['','requested','paid','shipped'];
+const PH=id=>S.pharm.find(x=>x.id===id),owe=ph=>(ph.led||[]).reduce((n,e)=>n+e.a,0);
+const ledger=(ph,a,t)=>{if(ph&&a)(ph.led=ph.led||[]).push({d:T(),t,a})};
+const trk=n=>{n=(n||'').replace(/\s/g,'');return/^1Z/i.test(n)?'https://www.ups.com/track?tracknum='+n:/^(92|93|94|95)\d{18,22}$/.test(n)?'https://tools.usps.com/go/TrackConfirmAction?tLabels='+n:/^\d{12,15}$/.test(n)?'https://www.fedex.com/fedextrack/?trknbr='+n:''};
+const rxLab=i=>{const q=STG.indexOf(i.stage||''),ph=PH(i.ph);return q===0?(ph&&ph.auto?'Confirmed it is coming':'Requested'):['','Paid','Shipped','Received'][q]};
+function info(it){const d=diff(it.due,T()),lead=it.lead||0,rx=it.cat==='rx',st=STG.indexOf(it.stage||''),ph=rx?PH(it.ph):null,by=rx&&st===0?d-lead:d,win=rx?lead+3:lead;
+ let urg=by<0?30-by*3:Math.max(0,14-by);if(rx&&st>0&&st<3&&d<=2)urg+=10;
+ const noRef=rx&&it.refills!==''&&it.refills!=null&&+it.refills<=0;if(noRef)urg+=8;
+ const score=W[it.cat]*6+urg+Math.min((it.amt||0)/100,10);let why;
+ if(rx){const run=fd(it.due),c=it.amt?$$(it.amt):'',auto=ph&&ph.auto;
+  why=st===0?(auto?(by<0?`Auto-refill should have started ${-by} days ago. Call ${esc(ph.name)}.`:`Auto-refill. Make sure it is in process by ${fd(add(it.due,-lead))}.`):(by<0?`Request is ${-by} days late. Delivery takes about ${lead} days and it runs out ${run}.`:`Request by ${fd(add(it.due,-lead))}. Delivery takes about ${lead} days.`))
+   :st===1?`${auto?'Confirmed.':'Requested.'}${c?' Next: pay the '+c+'.':' Next: pay.'}`:st===2?`Paid. Waiting for it to ship. Runs out ${run}.`:`Shipped${it.eta?'. Expected '+fd(it.eta):''}. Runs out ${run}.${it.eta&&it.eta>it.due?' It may arrive after it runs out.':''}`;
+  if(st>0&&st<3&&d<=2)why+=' Not shipped yet. Call the pharmacy.';
+  if(noRef)why+=' No refills left: ask the prescriber for a new prescription.'}
+ else why=(it.amt?$$(it.amt)+' ':'')+(d<0?`${-d} days overdue`:d===0?'due today':d===1?'due tomorrow':'due '+fd(it.due))+(it.note?' · '+esc(it.note):'');
+ return{d,by,score,why,show:d<=win||(rx&&st>0)}}
+function finish(it){const t=T();it.last=t;it.stage='';if(it.cat==='rx'&&it.refills!==''&&it.refills!=null)it.refills=Math.max(0,+it.refills-1);if(it.rep==='none'||!step(it.due,it.rep)){it.arch=true;return}
+ do{it.due=step(it.due,it.rep)}while(it.due<t&&it.rep!=='none')}
+
+/* ---- forecast + decision check ---- */
+function timeline(extra){const t=T(),end=addM(t,6),ev=[],s=S.set,ev0=+s.bal||0;
+ if(+s.pay&&s.next){let d=s.next,n=0;const e=+s.every||14;while(d<t&&n++<900)d=add(d,e);while(d<=end&&n++<900){ev.push([d,+s.pay]);d=add(d,e)}}
+ S.items.forEach(i=>{if(!i.amt)return;let o=occ(i,t,end,true);if(i.cat==='rx'&&i.stage)o=o.slice(1);o.forEach(d=>ev.push([d,-i.amt]))});S.pharm.forEach(x=>{const b=owe(x);if(b>0)ev.push([t,-b])});if(extra)ev.push(extra);
+ ev.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:b[1]-a[1]);let bal=ev0,min=ev0,minD=t;
+ ev.forEach(([d,v])=>{bal+=v;if(bal<min){min=bal;minD=d}});return{ev,min,minD,end:bal,start:ev0}}
+function checkAfford(){const a=+aff.amt,d=aff.date||T();if(!a){aff.res='';return}const base=timeline(),w=timeline([d,-a]);
+ aff.res=w.min>=0?`Fits. Lowest balance would be ${$$(w.min)} on ${fd(w.minD)}.`:`Does not fit. You would be ${$$(-w.min)} short on ${fd(w.minD)}${base.min<0?' (you are already short without it)':''}.`}
+
+/* ---- views ---- */
+function card(x,top){const i=x.i,ph=i.cat==='rx'?PH(i.ph):null,lab=i.cat==='rx'?rxLab(i):i.cat==='bill'?'Paid':'Done',tl=i.cat==='rx'&&i.stage==='shipped'?trk(i.track):'';
+ return`<div class="card${top?' top':''}${x.d<0?' late':''}" data-edit="${i.id}"><div class="row"><b>${esc(i.title)}${i.who?' · '+esc(i.who):''}</b><span class="chip">${ph?esc(ph.name):CAT[i.cat]}</span></div><p class="why">${x.why}${i.cat==='rx'&&i.stage==='shipped'&&i.track&&!tl?' Tracking: '+esc(i.track):''}</p><div class="btns" style="margin:0"><button class="${top?'pri':''}" data-act="go" data-id="${i.id}">${lab}</button>${tl?`<a class="chip" style="padding:12px 16px;align-self:center;text-decoration:none;color:var(--am)" href="${tl}" target="_blank" rel="noopener">Track</a>`:''}</div></div>`}
+function vToday(){const t=T(),all=S.items.filter(i=>i.cat!=='routine'&&!i.arch).map(i=>({i,...info(i)})).filter(x=>x.show).sort((a,b)=>b.score-a.score),
+ ship=all.filter(x=>x.i.cat==='rx'&&x.i.stage==='shipped'),act=all.filter(x=>!ship.includes(x)),rt=S.items.filter(i=>i.cat==='routine');
+ let h=(note?`<div class="card top"><b>${esc(note)}</b></div>`:'')+'<div class="btns" style="margin-top:6px"><button data-act="addrx">+ Prescription</button><button data-act="paste">Paste tracking</button></div>';
+ if(!S.items.length)return h+'<div class="empty">Nothing here yet. Add your pharmacies under Money, then tap + Prescription. You can also add bills and practices with +, or import your LifeOS backup.</div>';
+ const owed=S.pharm.reduce((n,x)=>n+Math.max(0,owe(x)),0);if(owed>0)h+=`<div class="card" style="margin-top:10px"><b>Owed to pharmacies: ${$$(owed)}</b><div class="sub">See Money for each pharmacy.</div></div>`;
+ if(ship.length)h+='<h2>On the way</h2>'+ship.map(x=>card(x,0)).join('');
+ if(act.length)h+='<h2>Do next</h2>'+act.slice(0,3).map(x=>card(x,1)).join('');else if(!ship.length)h+='<div class="empty">Nothing is due. Enjoy it.</div>';
+ if(rt.length)h+='<h2>Routine</h2><div class="card">'+rt.map(i=>`<div class="chk${i.last===t?' d':''}"><label class="row" style="flex:1;justify-content:flex-start;gap:12px;align-items:center"><input type="checkbox" data-act="chk" data-id="${i.id}"${i.last===t?' checked':''}><span>${esc(i.title)}</span></label><button data-edit="${i.id}" aria-label="Edit">Edit</button></div>`).join('')+'</div>';
+ if(act.length>3)h+='<h2>Coming up</h2>'+act.slice(3).map(x=>card(x,0)).join('');return h}
+function vWeek(){const t=T(),late=S.items.filter(i=>i.cat!=='routine'&&!i.arch&&i.due<t),days={};
+ S.items.forEach(i=>{if(i.cat!=='routine')occ(i,t,add(t,6),false).forEach(d=>(days[d]=days[d]||[]).push(i))});
+ let h=late.length?'<h2>Overdue</h2>'+late.map(i=>card({i,...info(i)},0)).join(''):'';
+ for(let n=0;n<7;n++){const d=add(t,n),l=days[d]||[];h+=`<h2>${n?fd(d):'Today'}</h2>`+(l.length?l.map(i=>`<div class="card" data-edit="${i.id}"><div class="row"><b>${esc(i.title)}${i.who?' · '+esc(i.who):''}</b><span>${i.amt?$$(i.amt):''}</span></div><span class="chip">${CAT[i.cat]}</span></div>`).join(''):'<div class="sub">Nothing scheduled.</div>')}return h}
+function vMoney(){const s=S.set,tl=timeline(),m={};tl.ev.forEach(([d,v])=>{const k=d.slice(0,7),r=m[k]=m[k]||{i:0,o:0};v>0?r.i+=v:r.o+=v});
+ let bal=tl.start,rows='';Object.keys(m).sort().forEach(k=>{bal+=m[k].i+m[k].o;rows+=`<tr><td>${P(k+'-01').toLocaleDateString(undefined,{month:'short',year:'2-digit'})}</td><td class="pos">${$$(m[k].i)}</td><td>${$$(m[k].o)}</td><td class="${bal<0?'neg':''}">${$$(bal)}</td></tr>`});
+ const f=(k,l,t,a='')=>`<label>${l}<input data-set="${k}" type="${t}" ${a} value="${esc(s[k])}"></label>`;
+ return`<h2>Next 6 months</h2><div class="card">${tl.ev.length?`<table><tr><th>Month</th><th>In</th><th>Out</th><th>End</th></tr>${rows}</table><p class="why">Lowest point: <b class="${tl.min<0?'neg':''}">${$$(tl.min)}</b> on ${fd(tl.minD)}. Counts bills, copays and fees that have an amount.</p>`:'<div class="sub">Enter your balance and paycheck below, and add amounts to bills.</div>'}</div>
+<h2>Can we afford it?</h2><div class="card"><label>Amount ($)<input id="aa" type="number" inputmode="decimal" value="${esc(aff.amt)}"></label><label>Date<input id="ad" type="date" value="${aff.date||T()}"></label><div class="btns"><button class="pri" data-act="aff">Check</button></div>${aff.res?`<div class="res">${aff.res}</div>`:''}</div>
+${phHtml()}<h2>Your numbers</h2><div class="card">${f('bal','Balance today ($)','number','inputmode=decimal step=0.01')}${f('pay','Paycheck ($)','number','inputmode=decimal step=0.01')}${f('next','Next payday','date')}${f('every','Days between paychecks','number','inputmode=numeric')}</div>
+<h2>Backup and import</h2><div class="card"><div class="btns"><button data-act="copy">Copy backup</button><button data-act="dl">Download</button></div><label>Restore a backup, or import a LifeOS (FLC) backup<input type="file" accept=".json,application/json" id="fl"></label>${pend?`<label><input type="checkbox" id="iv" checked>Vehicles: oil change and registration</label><label><input type="checkbox" id="il" checked>Open loops</label><label><input type="checkbox" id="ib">Bills (check these first, some may be sample entries)</label><div class="btns"><button class="pri" data-act="imp">Import selected</button></div>`:''}</div>`}
+
+function phHtml(){return'<h2>Pharmacies</h2>'+(S.pharm.length?S.pharm.map(x=>{const b=owe(x),l=(x.led||[]).slice(-4).reverse();return`<div class="card"><div class="row"><b>${esc(x.name)}</b><b class="${b>0?'neg':'pos'}">${b>0?'Owe '+$$(b):b<0?'Credit '+$$(-b):'Paid up'}</b></div><div class="sub">${x.auto?'Auto-refill':'You request refills'} · delivery about ${x.lead||7} days${x.phone?` · <a style="color:var(--am)" href="tel:${esc(x.phone)}">${esc(x.phone)}</a>`:''}</div>${l.map(e=>`<div class="sub" style="display:flex;justify-content:space-between"><span>${fd(e.d)} ${esc(e.t)}</span><span>${$$(e.a)}</span></div>`).join('')}<div class="btns"><button data-act="phpay" data-id="${x.id}">Add payment</button><button data-act="phchg" data-id="${x.id}">Add charge</button><button data-act="phedit" data-id="${x.id}">Edit</button></div></div>`}).join(''):'<div class="sub">No pharmacies yet.</div>')+'<button data-act="phadd">+ Pharmacy</button>'}
+function openPh(id){edit=id;const x=id?PH(id):{name:'',auto:false,lead:7,phone:''},sh=$('#sheet');sh.hidden=false;
+ sh.innerHTML=`<form id="f"><h2>${id?'Edit':'Add'} pharmacy</h2><label>Name<input id="pn" value="${esc(x.name)}" required></label><label><span><input type="checkbox" id="pa"${x.auto?' checked':''}>Auto-refills and ships on its own</span></label><label>Days from order to delivery<input id="pl" type="number" inputmode="numeric" value="${x.lead||7}"></label><label>Phone<input id="pt" type="tel" value="${esc(x.phone)}"></label>${id?'':'<label>Balance you owe now ($)<input id="pb" type="number" step="0.01" inputmode="decimal"></label>'}<div class="btns"><button type="submit" class="pri">Save</button>${id?'<button type="button" data-act="phdel">Delete</button>':''}<button type="button" data-act="close">Cancel</button></div></form>`;
+ $('#f').onsubmit=e=>{e.preventDefault();const v={name:$('#pn').value.trim(),auto:$('#pa').checked,lead:+$('#pl').value||7,phone:$('#pt').value.trim()};
+  if(id)Object.assign(x,v);else{const n={id:uid(),...v,led:[]},b0=+($('#pb').value||0);if(b0)ledger(n,b0,'Starting balance');S.pharm.push(n)}save();$('#sheet').hidden=true;render()}}
+/* ---- tracking from pasted messages ---- */
+const MO='jan feb mar apr may jun jul aug sep oct nov dec'.split(' ');
+const carrierOf=n=>/^1Z/i.test(n)?'UPS':/^9[2-5]\d{18,24}$/.test(n)?'USPS':/^(\d{12}|\d{15})$/.test(n)?'FedEx':'';
+function parseTrack(t){const nums=[],seen=new Set(),push=n=>{n=n.replace(/\s/g,'').toUpperCase();if(n.length>=9&&/\d/.test(n)&&!seen.has(n)){seen.add(n);nums.push({n,c:carrierOf(n)})}};
+ (t.match(/\b1Z[0-9A-Z]{16}\b/gi)||[]).forEach(push);(t.match(/\b9[2-5]\d{18,24}\b/g)||[]).forEach(push);
+ for(const m of t.matchAll(/(?:tracknum|trknbr|tlabels|tracking[_-]?number|tracknumbers?)=([A-Z0-9]{9,30})/gi))push(m[1]);
+ for(const m of t.matchAll(/tracking\s*(?:number|no\.?|#|id)?\s*(?:is)?\s*[:#-]?\s*([A-Z0-9]{9,30})/gi))push(m[1]);
+ (t.match(/\b\d{12}\b|\b\d{15}\b/g)||[]).forEach(push);
+ const now=new Date(),td=T(),mk=(y,mo,d)=>{const x=new Date(y,mo,d,12);return x.getMonth()===mo?iso(x):''};
+ let eta='',m=t.match(/(?:deliver\w*|arriv\w*|expected|estimated|by|on)[^.\n]{0,50}?\b(?:(?:mon|tue|wed|thu|fri|sat|sun)\w*,?\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b(?:,?\s*(\d{4}))?/i);
+ if(m){const mo=MO.indexOf(m[1].toLowerCase());eta=mk(+(m[3]||now.getFullYear()),mo,+m[2]);if(eta&&!m[3]&&diff(eta,td)<-30)eta=mk(now.getFullYear()+1,mo,+m[2])}
+ else if(m=t.match(/(?:deliver\w*|arriv\w*|expected|estimated)[^.\n]{0,50}?\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/i)){let y=m[3]?+m[3]:now.getFullYear();if(y<100)y+=2000;eta=mk(y,+m[1]-1,+m[2]);if(eta&&!m[3]&&diff(eta,td)<-30)eta=mk(y+1,+m[1]-1,+m[2])}
+ else if(/(?:deliver\w*|arriv\w*)[^.\n]{0,30}\btomorrow\b/i.test(t))eta=add(td,1);else if(/(?:deliver\w*|arriv\w*)[^.\n]{0,30}\btoday\b/i.test(t))eta=td;
+ return{nums,eta}}
+function matchRx(t){const low=t.toLowerCase();return S.items.filter(i=>i.cat==='rx'&&!i.arch).map(i=>{const ph=PH(i.ph);let sc=0;if(ph&&low.includes(ph.name.toLowerCase()))sc+=3;if(i.title&&low.includes(i.title.toLowerCase()))sc+=3;sc+={'':0,requested:1,paid:2,shipped:0}[i.stage||''];return{i,sc}}).sort((a,b)=>b.sc-a.sc)}
+function openPaste(text){edit=null;const sh=$('#sheet');sh.hidden=false;
+ sh.innerHTML=`<form id="f" onsubmit="return false"><h2>Add tracking</h2><label>Paste the text message or email<textarea id="pt" rows="5">${esc(text||'')}</textarea></label><div class="btns"><button type="button" data-act="readclip">Paste from clipboard</button><button type="button" class="pri" data-act="findtrk">Find tracking</button></div><div id="pr"></div><div class="btns"><button type="button" data-act="close">Close</button></div></form>`;if(text)showTrack()}
+function showTrack(){const t=$('#pt').value,r=parseTrack(t),c=matchRx(t),box=$('#pr');
+ if(!r.nums.length){box.innerHTML='<div class="res">No tracking number found. UPS, USPS and FedEx numbers are recognized. Paste the whole message, or type the number into the refill.</div>';return}
+ if(!c.length){box.innerHTML='<div class="res">Add the prescription first, then paste this again.</div>';return}
+ box.innerHTML=`<label>Tracking number<select id="tn">${r.nums.map(x=>`<option value="${esc(x.n)}">${esc(x.n)}${x.c?' ('+x.c+')':''}</option>`).join('')}</select></label><label>Expected delivery<input id="te" type="date" value="${r.eta}"></label><label>Which refill<select id="tr">${c.map(x=>{const ph=PH(x.i.ph);return`<option value="${x.i.id}">${esc(x.i.title)}${x.i.who?' · '+esc(x.i.who):''}${ph?' · '+esc(ph.name):''} (${x.i.stage||'not requested'})</option>`}).join('')}</select></label>${c[0].sc===0?'<div class="sub">No pharmacy or medication name matched, so check the refill.</div>':''}<div class="btns"><button type="button" class="pri" data-act="savetrk">Save to refill</button></div>`}
+function saveTrk(){const it=S.items.find(i=>i.id===$('#tr').value);if(!it)return;it.track=$('#tn').value;if($('#te').value)it.eta=$('#te').value;it.stage='shipped';save();$('#sheet').hidden=true;render()}
+let note='';
+function autoApply(t){const r=parseTrack(t),c=matchRx(t);if(r.nums.length!==1||!c.length||c[0].sc<3||(c[1]&&c[1].sc===c[0].sc))return false;
+ const it=c[0].i,n=r.nums[0].n;if(it.stage==='shipped'&&it.track===n){note='Already saved: '+it.title+' '+n;return true}
+ it.track=n;if(r.eta)it.eta=r.eta;it.stage='shipped';save();note='Tracking saved for '+it.title+(it.who?' · '+it.who:'')+': '+n+(r.eta?', expected '+fd(r.eta):'');return true}
+function hashPaste(){const h=new URLSearchParams(location.hash.slice(1));if(!h.has('paste'))return;const t=(h.get('paste')||'').slice(0,8000),auto=h.get('auto')==='1';history.replaceState(null,'',location.pathname+location.search);
+ if(auto&&autoApply(t)){tab='today';render();setTimeout(()=>{note='';render()},9000)}else openPaste(t)}
+function render(){const t=new Date();$('#ti').textContent={today:'Today',week:'This week',money:'Money'}[tab];$('#su').textContent=t.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+ document.querySelectorAll('nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));$('#v').innerHTML={today:vToday,week:vWeek,money:vMoney}[tab]();
+ const fl=$('#fl');if(fl)fl.onchange=()=>fl.files[0]&&readFile(fl.files[0])}
+
+/* ---- sheet ---- */
+function lbl(c){$('#rxf').hidden=c!=='rx';$('#fdl').textContent=c==='rx'?'Runs out on':'Due';$('#fll').textContent=c==='rx'?'Days to get it (request to delivery)':'Remind me (days before)'}
+function openSheet(id,dc){edit=id;dc=dc||'bill';const it=id?S.items.find(i=>i.id===id):{cat:dc,title:'',due:T(),rep:DR[dc],amt:'',lead:DL[dc],note:''},sh=$('#sheet');sh.hidden=false;
+ sh.innerHTML=`<form id="f"><h2>${id?'Edit':'Add'}</h2><label>Type<select id="fc">${Object.entries(CAT).map(([k,v])=>`<option value="${k}"${k===it.cat?' selected':''}>${v}</option>`).join('')}</select></label><label>Name<input id="ft" value="${esc(it.title)}" required></label><label><span id="fdl"></span><input id="fd" type="date" value="${it.due||''}"></label><label>Repeats<select id="fr">${REP.map(([k,v])=>`<option value="${k}"${k===it.rep?' selected':''}>${v}</option>`).join('')}</select></label><label>Amount ($, copay or fee)<input id="fa" type="number" step="0.01" inputmode="decimal" value="${it.amt||''}"></label><label><span id="fll"></span><input id="fl2" type="number" inputmode="numeric" value="${it.lead??3}"></label><label>Notes<input id="fn" value="${esc(it.note)}"></label><div id="rxf"><label>Pharmacy<select id="fph"><option value="">Not set</option>${S.pharm.map(x=>`<option value="${x.id}"${x.id===it.ph?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label><label>For (who)<input id="fw" value="${esc(it.who)}"></label><label>Refills left (blank if unknown)<input id="frf" type="number" inputmode="numeric" value="${it.refills??''}"></label><label>Status<select id="fs">${[['','Not requested yet'],['requested','Requested'],['paid','Paid'],['shipped','Shipped']].map(([k,v])=>`<option value="${k}"${k===(it.stage||'')?' selected':''}>${v}</option>`).join('')}</select></label><label>Tracking number<input id="ftr" value="${esc(it.track)}"></label><label>Expected delivery<input id="fe" type="date" value="${it.eta||''}"></label></div><div class="btns"><button type="submit" class="pri">Save</button>${id?'':'<button type="submit" data-more="1">Save + add another</button>'}${id?'<button type="button" data-act="del">Delete</button>':''}<button type="button" data-act="close">Cancel</button></div></form>`;
+ $('#fph').onchange=e=>{const x=PH(e.target.value);if(x)$('#fl2').value=x.lead||7};
+ $('#fc').onchange=e=>{const c=e.target.value;$('#fr').value=DR[c];$('#fl2').value=DL[c];lbl(c)};lbl(it.cat);
+ $('#f').onsubmit=e=>{e.preventDefault();const v={cat:$('#fc').value,title:$('#ft').value.trim(),due:$('#fd').value||T(),rep:$('#fr').value,amt:+$('#fa').value||0,lead:+$('#fl2').value||0,note:$('#fn').value};
+  if(v.cat==='rx'){v.who=$('#fw').value.trim();v.refills=$('#frf').value===''?'':+$('#frf').value;v.stage=$('#fs').value;v.track=$('#ftr').value.trim();v.ph=$('#fph').value;v.eta=$('#fe').value}
+  if(id)Object.assign(it,v);else S.items.push({id:uid(),...v});save();const more=e.submitter&&e.submitter.dataset.more;if(more)openSheet(null,v.cat);else $('#sheet').hidden=true;render()}}
+
+/* ---- import / export ---- */
+function readFile(f){const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(j._format==='lifeos-lite'&&Array.isArray(j.items)){if(confirm('Replace everything with this backup?')){S=j;save();render()}return}pend=j;render()}catch(e){alert('That file is not valid JSON.')}};r.readAsText(f)}
+function doImport(){const j=pend,have=new Set(S.items.map(i=>i.cat+i.title));let n=0;
+ const put=x=>{if(have.has(x.cat+x.title))return;have.add(x.cat+x.title);S.items.push({id:uid(),rep:'none',lead:3,...x});n++};
+ if($('#iv').checked)(j.vehicles||[]).forEach(v=>{const m=(j.maintenance||[]).filter(x=>x.vehicle===v.id),last=re=>m.filter(x=>re.test(x.serviceType)&&x.date).sort((a,b)=>b.date.localeCompare(a.date))[0],oil=last(/oil/i),reg=last(/registration/i);
+  if(oil)put({cat:'vehicle',title:v.name+': oil change',due:addM(oil.date,6),rep:'semiannual',lead:14,note:'Last '+oil.date+(oil.mileage?' at '+oil.mileage.toLocaleString()+' mi':'')});
+  if(reg)put({cat:'vehicle',title:v.name+': registration',due:addM(reg.date,12),rep:'yearly',lead:30,note:'Last '+reg.date})});
+ if($('#il').checked)(j.loops||[]).filter(l=>!/^(complete|done)/i.test(l.status||'')).forEach(l=>put({cat:'other',title:l.title,due:l.dueDate||T(),note:'From LifeOS ('+(l.status||'open')+')'}));
+ if($('#ib').checked)(j.bills||[]).forEach(b=>{const rec=!!b.isRecurring,amt=b.remainingBalance||(rec?b.originalBalance:0);if(amt&&b.dueDate)put({cat:'bill',title:b.title,due:b.dueDate,amt,rep:rec?'monthly':'none',note:b.payee||''})});
+ pend=null;save();alert('Imported '+n+' items.');tab='today';render()}
+
+/* ---- events ---- */
+document.addEventListener('click',e=>{const a=e.target.closest('[data-act]');
+ if(!a){const c=e.target.closest('[data-edit]');if(c&&!e.target.closest('input'))openSheet(c.dataset.edit);return}
+ const id=a.dataset.id,it=id&&S.items.find(i=>i.id===id),k=a.dataset.act;
+ if(k==='tab'){tab=a.dataset.t;render();scrollTo(0,0)}
+ else if(k==='add')openSheet(null);
+ else if(k==='addrx')openSheet(null,'rx');
+ else if(k==='paste')openPaste();else if(k==='findtrk')showTrack();else if(k==='savetrk')saveTrk();
+ else if(k==='readclip'){navigator.clipboard.readText().then(x=>{$('#pt').value=x;showTrack()},()=>alert('Could not read the clipboard. Paste into the box instead.'))}
+ else if(k==='phadd')openPh(null);else if(k==='phedit')openPh(id);
+ else if(k==='phdel'){if(confirm('Delete this pharmacy and its history?')){S.pharm=S.pharm.filter(x=>x.id!==edit);S.items.forEach(i=>{if(i.ph===edit)i.ph=''});save();$('#sheet').hidden=true;render()}}
+ else if(k==='phpay'||k==='phchg'){const x=PH(id),a=prompt(k==='phpay'?'Payment amount ($)':'Charge amount ($)');if(a&&+a){ledger(x,k==='phpay'?-Math.abs(+a):Math.abs(+a),k==='phpay'?'Payment':'Charge');save();render()}}
+ else if(k==='close')$('#sheet').hidden=true;
+ else if(k==='del'){if(confirm('Delete this?')){S.items=S.items.filter(i=>i.id!==edit);save();$('#sheet').hidden=true;render()}}
+ else if(k==='go'){if(it.cat==='rx'){const ph=PH(it.ph),q=STG.indexOf(it.stage||'');
+  if(q===0){it.stage='requested';ledger(ph,+it.amt||0,(ph&&ph.auto?'Auto-refill ':'Ordered ')+it.title)}
+  else if(q===1){const a=prompt('Amount paid ($)',it.amt||'');if(a===null)return;it.stage='paid';ledger(ph,-(+a||0),'Paid '+it.title)}
+  else if(q===2){const n=prompt('Tracking number (optional)',it.track||'');if(n===null)return;it.track=n.trim();it.stage='shipped'}
+  else finish(it)}else finish(it);save();render()}
+ else if(k==='chk'){it.last=a.checked?T():'';save();render()}
+ else if(k==='aff'){aff.amt=$('#aa').value;aff.date=$('#ad').value;checkAfford();render()}
+ else if(k==='copy'){navigator.clipboard.writeText(JSON.stringify(S)).then(()=>alert('Backup copied.'),()=>alert('Copy failed. Use Download.'))}
+ else if(k==='dl'){const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));l.download='lifeos-lite-backup-'+T()+'.json';l.click()}
+ else if(k==='imp')doImport()});
+document.addEventListener('change',e=>{const k=e.target.dataset.set;if(k){S.set[k]=e.target.value;save();render()}});
+render();addEventListener('hashchange',hashPaste);hashPaste();
+</script></body></html>
